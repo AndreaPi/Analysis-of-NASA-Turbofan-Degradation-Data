@@ -1,0 +1,263 @@
+---
+title: "Exploratory Data Analysis of NASA Turbofan Engine Degradation Data"
+author: "`r Sys.Date()`"
+date: '_reading time: ? minutes_'
+subtitle: Andrea Panizza
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+params:
+  output_dir: ../output
+---
+
+<style>
+p.caption {
+  font-size: 0.8em;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(knitr)
+library(readr)
+library(ggplot2)
+# library(patchwork)
+library(tools)
+library(magrittr)
+# library(flexsurv)
+# library(OIsurv)
+# library(dotwhisker)
+# library(fitdistrplus)
+library(skimr)
+library(dplyr)
+library(tidyr)
+library(viridis)
+# chunk options
+opts_chunk$set(warning = FALSE,
+               message = FALSE,
+               echo    = FALSE,
+               fig.align  = "center",
+               fig.width  = 15,
+               fig.height = 12)
+# tibble printing options
+options(tibble.print_max = 100, tibble.print_min = 100)
+# Setup plot environment
+textSize <- 15
+theme_set(theme_gray(base_size = textSize))
+# Set data directory: output directory is passed as a parameter to the report
+data_dir <- "../data"
+output_dir <- params$output_dir
+
+```
+
+## Read data
+
+The data are taken from the [NASA Ames Prognostic Center](https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/). In particular, dataset 6 **Turbofan Engine Degradation Simulation Data Set** has been used. The description is
+
+>Engine degradation simulation was carried out using C-MAPSS. Four different were sets simulated under different combinations of operational conditions and fault modes. Records several sensor channels to characterize fault evolution. The data set was provided by the Prognostics CoE at NASA Ames.
+
+These data have been used in the PHM (Prognostic and Health Management) competition in 2008. A `readme.txt` file is provided with the data, containing the following information which clarifies the data format:
+
+_Experimental Scenario_
+
+_Data sets consists of multiple multivariate time series. Each data set is further divided into training and test subsets. Each time series is from a different engine – i.e., the data can be considered to be from a fleet of engines of the same type. Each engine starts with different degrees of initial wear and manufacturing variation which is unknown to the user. This wear and variation is considered normal, i.e., it is not considered a fault condition. There are three operational settings that have a substantial effect on engine performance. These settings are also included in the data. The data is contaminated with sensor noise._
+
+_The engine is operating normally at the start of each time series, and develops a fault at some point during the series. In the training set, the fault grows in magnitude until system failure. In the test set, the time series ends some time prior to system failure. The objective of the competition is to predict the number of remaining operational cycles before failure in the test set, i.e., the number of operational cycles after the last cycle that the engine will continue to operate. Also provided a vector of true Remaining Useful Life (RUL) values for the test data._
+
+_The data are provided as a zip-compressed text file with 26 columns of numbers, separated by spaces. Each row is a snapshot of data taken during a single operational cycle, each column is a different variable. The columns correspond to:_
+
+ <i>
+ 
+ 1.	unit number
+ 2.	time, in cycles
+ 3.	operational setting 1
+ 4.	operational setting 2
+ 5.	operational setting 3
+ 6.	sensor measurement  1
+ 7.	sensor measurement  2
+ .
+ .
+ .
+ 26. sensor measurement 21
+ 
+ </i>
+
+We will concentrate on data set `FD001` for now, which consist of a training set with 100 time series, a test set with the same number of time series and a file containing the 100 true Remaining Useful Life (RUL) values, that our algorithm should predict for each corresponding test time series. Let's read the data:
+
+```{r read_FD001, echo = TRUE}
+data_filename <- "train_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+train_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+data_filename <- "test_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+data_filename <- "RUL_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+RUL_test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X2 = "_"))
+
+```
+
+
+## Exploratory Data Analysis
+### Summary statistics
+
+The training set has `r nrow(train_set)` observations for `r ncol(train_set)` variables. The test set has `r nrow(test_set)` observations for `r ncol(test_set)` variables. Let's name the variables for convenience, and then display a brief summary for the training set:
+
+```{r var_names}
+var_names <- c("engine", "cycles", "op_setting_1", "op_setting_2", "op_setting_3",
+               paste0("sensor_",1:21) )
+names(train_set) <- var_names
+names(test_set)  <- var_names
+
+# add a Time to Event variable
+add_tte <- function(dataset){
+  dataset %<>% group_by(engine) %>% mutate(tte = max(cycles) - cycles) %>% ungroup
+}
+train_set <- add_tte(train_set)
+test_set  <- add_tte(test_set)
+
+```
+
+```{r summary_train}
+skim_with(numeric = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL, hist = NULL),
+          integer = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL, hist = NULL))
+# skim_with(numeric = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL),
+#           integer = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL))
+skim_with(numeric = list(iqr = function(x) IQR(x, na.rm = TRUE)),
+          integer = list(iqr = function(x) IQR(x, na.rm = TRUE)))
+stats_train <- skim(train_set)
+kable(skim(train_set))
+```
+
+and for the test set:
+  
+```{r summary_test}
+stats_test <- skim(test_set)
+kable(skim(test_set))
+
+# which variables are constant? Are they the same in the train & test set?
+constants <- stats_train %>% filter(stat == "sd", value == 0)
+temp      <- stats_test %>% filter(stat == "sd", value == 0)
+stopifnot(constants$variable == temp$variable)
+# stats_train %>% filter(stat %in% c("sd", "iqr")) %>% 
+#   select(variable, stat, value) %>%
+#   spread(key = stat, value = value) %>%
+#   filter(iqr == 0 & sd > 0)
+
+```
+
+Notes:
+  
+* **no missing data**, as it could be expected from simulated data
+* 100 time series in the training set, and 100 time series in the test set
+* the statistics on the number of cycles aren't relevant, because we should only look at the the statistics for the **maximum** number of cycles for each engine. However, the fact that the mean and median number of cycles for the training set are larger than for the test set, agrees with the fact that in the training set, the engines are followed until system failure. In the test set, the time series ends some time prior to system failure.  
+* the following variables are constant, both in the training nd in the test set, meaning that the operating condition was fixed and/or the sensor was broken/inactive: `r constants$variable`. We can discard these variables from the analysis. We will also normalize data, based on the mean and standard deviation of the training set.
+* __`sensor_6` is practically constant__ (`iqr=0`), even though it's not _exactly_ constant (the standard deviation is not 0). As a matter of fact, across all engines in the training set, it oscillates between `r length(unique(train_set$sensor_6))`  values which differ just for the last digit: `r unique(train_set$sensor_6)`. It would probably make sense to get rid of this variable too, but we'll leave it in, in the extremely unlikely case that these oscillations carry any useful signal. If they don't, no harm is done because the signal is so simple that the WTTE-RNN won't have any difficulty learning to ignore it.   
+
+```{r}
+train_set %<>% select(-one_of(constants$variable))
+test_set  %<>% select(-one_of(constants$variable))
+```
+
+Finally, we also __normalize__ data, because presumably the units of measurements (which are unknown anyway) don't carry any useful information about RUL. Also, normalizing features is usually a good idea when training Deep Neural Networks. __Normalization must be performed using only training set data__.
+
+```{r}
+# scaling based on training set
+train_set_unscaled <- train_set
+test_set_unscaled  <- test_set
+
+index <- !(names(train_set) %in% c("engine", "cycles"))
+temp  <- scale(train_set[, index])
+train_set[, index] <- temp
+
+means                <- attr(temp, "scaled:center")
+standard_deviations  <- attr(temp, "scaled:scale")
+test_set[, index]    <- scale(test_set[, index], center = means, scale = standard_deviations)
+
+```
+
+### The distribution of the time-to-event in the training set
+
+ By looking at the distribution of the time-to-event for engines in the training set, we can make a few interesting observations:
+```{r}
+
+tte <- train_set_unscaled %>% select(engine, cycles, tte) %>% group_by(engine) %>%
+  summarize(TTE = tte[1])
+
+nbins = nclass.FD(tte$TTE)
+ggplot(tte, aes(x = TTE, y = ..density..)) +
+  geom_histogram(col = "red", fill = "green", alpha = 0.2, bins = nbins) +
+  geom_density(col = "red", size = 1)
+
+mean_tte <- mean(tte$TTE)
+sd_tte   <- sd(tte$TTE)
+normal_percentile_975 <- mean_tte + 1.96 * sd_tte
+actual_percentile_975 <- quantile(tte$TTE, probs = 0.975) 
+```
+
+ * there are no "instant deaths": the minimum tte = `r min(tte$TTE)` is not extremely smaller than the maximum tte = `r max(tte$TTE)`
+ * the distribution is fairly right-skewed. With a sample mean of `r mean_tte` and a sample sd of `r sd_tte`, we would expect the $2.5\%$ of the data to be close to `r normal_percentile_975`, but the actual $97.5\%$-percentile is `r actual_percentile_975`, hinting to a  fatter tail than for a normal distribution. In other words, we have quite a few "Highlanders" which manage to live 300 days or more. Of course, this is not a formal hypothesis test, but it's still quite suggestive.
+
+### Plot all time series
+
+Looking first of all at the operating settings shows that `op_setting_1` seems to randomly oscillate with a decreasing standard deviation, while `op_setting_2`,  averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. This might be related with the failure of the engines (all engines in the training set fail at some time). We also note that `op_setting_2` is fairly quantized.
+```{r}
+
+op_settings <- train_set %>% select(engine, cycles, starts_with("op")) %>%
+  gather(key = setting, value = measurement, -engine, -cycles)
+
+ggplot(op_settings, aes(x = cycles, y =  measurement)) +
+  geom_line(aes(group = engine), alpha = 0.1) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~ setting, scales = "free_y")
+
+```
+
+Next, we have a look at the sensors data.
+```{r}
+
+sensors <- train_set %>% select(-starts_with("op"), -tte) %>%
+  gather(key = sensor, value = measurement, -engine, -cycles)
+
+ggplot(sensors, aes(x = cycles, y =  measurement)) +
+  geom_line(aes(group = engine), alpha = 0.025) +
+  # geom_smooth(se = FALSE) +
+  facet_wrap(~ sensor, scales = "free_y")
+```
+
+Given the large number of sensors and time series, the visualization is understandably complex, but we can get some insights:
+  
+  * there is a lot of signal in the sensors. For example, the sooner `sensor_11` starts increasing, the shorter the residual life of the engine.
+* there is also quite a lot of noise (large oscillations), and correlation (for example, `sensor_11` and `sensor_4`, or `sensor_9` and `sensor_14`, seem to have the same trend, at least averaged across all engines).
+* `sensor_17` measurements are fairly quantized, but they seem to carry some signal. As noted before, `sensor_6`  seems to oscillate randomly among `r length(unique(train_set_unscaled$sensor_6))` values, so it's probably useless.
+
+### Plot a sample of time series
+To have a look at the individual, instead than the global, trends, we can concentrate on a sample of engines:
+```{r}
+sample_train_set <- train_set %>% filter(engine %in% sample(engine, 10))
+sample_train_set$engine <- factor(sample_train_set$engine)
+
+sample_train_set_tall <- sample_train_set %>% 
+gather(key = sensor, value = measurement, -engine, -cycles, -starts_with("op"), -tte)
+ggplot(sample_train_set_tall, aes(x = cycles, y =  measurement, color = engine)) +
+geom_line() +
+geom_smooth(se = FALSE) +
+scale_color_viridis(discrete = TRUE) +
+facet_wrap(~ sensor, scales = "free_y")
+```
+
+This suggests that some sensors are correlated not only at a population level, i.e., averaging the sensor signals across all engines, but even for a single engine (compare `sensor_11` with `sensor_4` and `sensor_9` with `sensor_14` for the yellow line).
+
+This concludes our EDA. We can now save the normalized data, and estimate the RUL using some baseline models, which we will compare with the new model results.
+
+```{r}
+normalized_train_set_filename <- "norm_train_FD001.txt"
+data_path <- file.path(output_dir, normalized_train_set_filename)
+write_csv(train_set, data_path)
+normalized_test_set_filename <- "norm_test_FD001.txt"
+data_path <- file.path(output_dir, normalized_test_set_filename)
+write_csv(test_set, data_path)
+```
+
+## Remaining Useful Life Estimation
+
