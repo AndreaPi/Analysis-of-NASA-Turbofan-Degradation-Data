@@ -1,8 +1,7 @@
 ---
 title: "Exploratory Data Analysis of NASA Turbofan Engine Degradation Data"
-author: "2018-03-15"
-date: '_reading time: ? minutes_'
-subtitle: Andrea Panizza
+author: "Andrea Panizza"
+date: "2018-03-27"
 output:
   html_document:
     fig_caption: yes
@@ -181,7 +180,7 @@ Finally, we also __normalize__ data, because presumably the units of measurement
 ### The distribution of the time-to-event in the training set
 
  By looking at the distribution of the time-to-event for engines in the training set, we can make a few interesting observations:
-<img src="C:\Users\105047~1\BOXSYN~1\PC\qui\ANALYS~1\output\NASA_E~1/figure-html/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
 
  * there are no "instant deaths": the minimum tte = 127 is not extremely smaller than the maximum tte = 361
  * the distribution is fairly right-skewed. With a sample mean of 205.31 and a sample sd of 46.3427492, we would expect the $2.5\%$ of the data to be close to 296.1417884, but the actual $97.5\%$-percentile is 324.075, hinting to a  fatter tail than for a normal distribution. In other words, we have quite a few "Highlanders" which manage to live 300 days or more. Of course, this is not a formal hypothesis test, but it's still quite suggestive.
@@ -189,10 +188,10 @@ Finally, we also __normalize__ data, because presumably the units of measurement
 ### Plot all time series
 
 Looking first of all at the operating settings shows that `op_setting_1` seems to randomly oscillate with a decreasing standard deviation, while `op_setting_2`,  averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. This might be related with the failure of the engines (all engines in the training set fail at some time). We also note that `op_setting_2` is fairly quantized.
-<img src="C:\Users\105047~1\BOXSYN~1\PC\qui\ANALYS~1\output\NASA_E~1/figure-html/unnamed-chunk-4-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-4-1.png" style="display: block; margin: auto;" />
 
 Next, we have a look at the sensors data.
-<img src="C:\Users\105047~1\BOXSYN~1\PC\qui\ANALYS~1\output\NASA_E~1/figure-html/unnamed-chunk-5-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-5-1.png" style="display: block; margin: auto;" />
 
 Given the large number of sensors and time series, the visualization is understandably complex, but we can get some insights:
   
@@ -202,7 +201,7 @@ Given the large number of sensors and time series, the visualization is understa
 
 ### Plot a sample of time series
 To have a look at the individual, instead than the global, trends, we can concentrate on a sample of engines:
-<img src="C:\Users\105047~1\BOXSYN~1\PC\qui\ANALYS~1\output\NASA_E~1/figure-html/unnamed-chunk-6-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-6-1.png" style="display: block; margin: auto;" />
 
 This suggests that some sensors are correlated not only at a population level, i.e., averaging the sensor signals across all engines, but even for a single engine (compare `sensor_11` with `sensor_4` and `sensor_9` with `sensor_14` for the yellow line).
 

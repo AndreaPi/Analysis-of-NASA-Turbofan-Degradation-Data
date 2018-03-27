@@ -1,2 +1,6 @@
 # Analysis-of-NASA-Turbofan-Degradation-Data
-analysis of data from https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/
+An Exploratory Data Analysis of the simulated engine degradation data from https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/. No modeling of the data is attempted...for now.
+
+ - More information on the data are contained in the HTML report, in the `output` folder.
+ - To generate the report from scratch, run `render_report.r` in the `code` folder
+

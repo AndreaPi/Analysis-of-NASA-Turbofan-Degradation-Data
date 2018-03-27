@@ -1,8 +1,7 @@
 ---
 title: "Exploratory Data Analysis of NASA Turbofan Engine Degradation Data"
-author: "`r Sys.Date()`"
-date: '_reading time: ? minutes_'
-subtitle: Andrea Panizza
+author: "Andrea Panizza"
+date: "`r Sys.Date()`"
 output:
   html_document:
     fig_caption: yes
@@ -45,7 +44,7 @@ options(tibble.print_max = 100, tibble.print_min = 100)
 textSize <- 15
 theme_set(theme_gray(base_size = textSize))
 # Set data directory: output directory is passed as a parameter to the report
-data_dir <- "../data"
+data_dir <- file.path("..", "data")
 output_dir <- params$output_dir
 
 ```
