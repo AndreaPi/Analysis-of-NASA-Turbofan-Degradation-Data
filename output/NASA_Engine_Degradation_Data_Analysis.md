@@ -1,7 +1,7 @@
 ---
 title: "Exploratory Data Analysis of NASA Turbofan Engine Degradation Data"
 author: "Andrea Panizza"
-date: "2018-03-27"
+date: "2018-04-08"
 output:
   html_document:
     fig_caption: yes
@@ -28,7 +28,7 @@ These data have been used in the PHM (Prognostic and Health Management) competit
 
 _Experimental Scenario_
 
-_Data sets consists of multiple multivariate time series. Each data set is further divided into training and test subsets. Each time series is from a different engine – i.e., the data can be considered to be from a fleet of engines of the same type. Each engine starts with different degrees of initial wear and manufacturing variation which is unknown to the user. This wear and variation is considered normal, i.e., it is not considered a fault condition. There are three operational settings that have a substantial effect on engine performance. These settings are also included in the data. The data is contaminated with sensor noise._
+_Data sets consists of multiple multivariate time series. Each data set is further divided into training and test subsets. Each time series is from a different engine - i.e., the data can be considered to be from a fleet of engines of the same type. Each engine starts with different degrees of initial wear and manufacturing variation which is unknown to the user. This wear and variation is considered normal, i.e., it is not considered a fault condition. There are three operational settings that have a substantial effect on engine performance. These settings are also included in the data. The data is contaminated with sensor noise._
 
 _The engine is operating normally at the start of each time series, and develops a fault at some point during the series. In the training set, the fault grows in magnitude until system failure. In the test set, the time series ends some time prior to system failure. The objective of the competition is to predict the number of remaining operational cycles before failure in the test set, i.e., the number of operational cycles after the last cycle that the engine will continue to operate. Also provided a vector of true Remaining Useful Life (RUL) values for the test data._
 
@@ -57,9 +57,11 @@ We will concentrate on data set `FD001` for now, which consist of a training set
 data_filename <- "train_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 train_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
 data_filename <- "test_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
 data_filename <- "RUL_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 RUL_test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X2 = "_"))
@@ -73,95 +75,89 @@ The training set has 20631 observations for 26 variables. The test set has 13096
 
 
 
+Skim summary statistics  
+ n obs: 20631    
+ n variables: 27    
 
-```
-## Skim summary statistics  
-##  n obs: 20631    
-##  n variables: 27    
-## 
-## Variable type: integer
-## 
-## variable    missing   complete   n       mean     sd      median   iqr 
-## ----------  --------  ---------  ------  -------  ------  -------  ----
-## cycles      0         20631      20631   108.81   68.88   104      104 
-## engine      0         20631      20631   51.51    29.23   52       51  
-## sensor_17   0         20631      20631   393.21   1.55    393      2   
-## sensor_18   0         20631      20631   2388     0       2388     0   
-## 
-## Variable type: numeric
-## 
-## variable       missing   complete   n       mean       sd        median    iqr   
-## -------------  --------  ---------  ------  ---------  --------  --------  ------
-## op_setting_1   0         20631      20631   -8.9e-06   0.0022    0         0.003 
-## op_setting_2   0         20631      20631   2.4e-06    0.00029   0         5e-04 
-## op_setting_3   0         20631      20631   100        0         100       0     
-## sensor_1       0         20631      20631   518.67     0         518.67    0     
-## sensor_10      0         20631      20631   1.3        0         1.3       0     
-## sensor_11      0         20631      20631   47.54      0.27      47.51     0.35  
-## sensor_12      0         20631      20631   521.41     0.74      521.48    0.99  
-## sensor_13      0         20631      20631   2388.1     0.072     2388.09   0.1   
-## sensor_14      0         20631      20631   8143.75    19.08     8140.54   15.07 
-## sensor_15      0         20631      20631   8.44       0.038     8.44      0.051 
-## sensor_16      0         20631      20631   0.03       0         0.03      0     
-## sensor_19      0         20631      20631   100        0         100       0     
-## sensor_2       0         20631      20631   642.68     0.5       642.64    0.67  
-## sensor_20      0         20631      20631   38.82      0.18      38.83     0.25  
-## sensor_21      0         20631      20631   23.29      0.11      23.3      0.14  
-## sensor_3       0         20631      20631   1590.52    6.13      1590.1    8.12  
-## sensor_4       0         20631      20631   1408.93    9         1408.04   12.19 
-## sensor_5       0         20631      20631   14.62      0         14.62     0     
-## sensor_6       0         20631      20631   21.61      0.0014    21.61     0     
-## sensor_7       0         20631      20631   553.37     0.89      553.44    1.2   
-## sensor_8       0         20631      20631   2388.1     0.071     2388.09   0.09  
-## sensor_9       0         20631      20631   9065.24    22.08     9060.66   16.32 
-## tte            0         20631      20631   107.81     68.88     103       104
-```
+Variable type: integer
+
+variable    missing   complete   n       mean     sd      p50    iqr 
+----------  --------  ---------  ------  -------  ------  -----  ----
+cycles      0         20631      20631   108.81   68.88   104    104 
+engine      0         20631      20631   51.51    29.23   52     51  
+sensor_17   0         20631      20631   393.21   1.55    393    2   
+sensor_18   0         20631      20631   2388     0       2388   0   
+
+Variable type: numeric
+
+variable       missing   complete   n       mean       sd        p50       iqr   
+-------------  --------  ---------  ------  ---------  --------  --------  ------
+op_setting_1   0         20631      20631   -8.9e-06   0.0022    0         0.003 
+op_setting_2   0         20631      20631   2.4e-06    0.00029   0         5e-04 
+op_setting_3   0         20631      20631   100        0         100       0     
+sensor_1       0         20631      20631   518.67     0         518.67    0     
+sensor_10      0         20631      20631   1.3        0         1.3       0     
+sensor_11      0         20631      20631   47.54      0.27      47.51     0.35  
+sensor_12      0         20631      20631   521.41     0.74      521.48    0.99  
+sensor_13      0         20631      20631   2388.1     0.072     2388.09   0.1   
+sensor_14      0         20631      20631   8143.75    19.08     8140.54   15.07 
+sensor_15      0         20631      20631   8.44       0.038     8.44      0.051 
+sensor_16      0         20631      20631   0.03       0         0.03      0     
+sensor_19      0         20631      20631   100        0         100       0     
+sensor_2       0         20631      20631   642.68     0.5       642.64    0.67  
+sensor_20      0         20631      20631   38.82      0.18      38.83     0.25  
+sensor_21      0         20631      20631   23.29      0.11      23.3      0.14  
+sensor_3       0         20631      20631   1590.52    6.13      1590.1    8.12  
+sensor_4       0         20631      20631   1408.93    9         1408.04   12.19 
+sensor_5       0         20631      20631   14.62      0         14.62     0     
+sensor_6       0         20631      20631   21.61      0.0014    21.61     0     
+sensor_7       0         20631      20631   553.37     0.89      553.44    1.2   
+sensor_8       0         20631      20631   2388.1     0.071     2388.09   0.09  
+sensor_9       0         20631      20631   9065.24    22.08     9060.66   16.32 
+tte            0         20631      20631   107.81     68.88     103       104   
 
 and for the test set:
   
+Skim summary statistics  
+ n obs: 13096    
+ n variables: 27    
 
-```
-## Skim summary statistics  
-##  n obs: 13096    
-##  n variables: 27    
-## 
-## Variable type: integer
-## 
-## variable    missing   complete   n       mean     sd      median   iqr 
-## ----------  --------  ---------  ------  -------  ------  -------  ----
-## cycles      0         13096      13096   76.84    53.06   69       80  
-## engine      0         13096      13096   51.54    28.29   52       48  
-## sensor_17   0         13096      13096   392.57   1.23    393      1   
-## sensor_18   0         13096      13096   2388     0       2388     0   
-## 
-## Variable type: numeric
-## 
-## variable       missing   complete   n       mean       sd        median    iqr   
-## -------------  --------  ---------  ------  ---------  --------  --------  ------
-## op_setting_1   0         13096      13096   -1.1e-05   0.0022    0         0.003 
-## op_setting_2   0         13096      13096   4.2e-06    0.00029   0         5e-04 
-## op_setting_3   0         13096      13096   100        0         100       0     
-## sensor_1       0         13096      13096   518.67     0         518.67    0     
-## sensor_10      0         13096      13096   1.3        0         1.3       0     
-## sensor_11      0         13096      13096   47.42      0.2       47.41     0.27  
-## sensor_12      0         13096      13096   521.75     0.56      521.78    0.77  
-## sensor_13      0         13096      13096   2388.07    0.057     2388.07   0.08  
-## sensor_14      0         13096      13096   8138.95    10.19     8138.39   12.05 
-## sensor_15      0         13096      13096   8.43       0.029     8.42      0.039 
-## sensor_16      0         13096      13096   0.03       0         0.03      0     
-## sensor_19      0         13096      13096   100        0         100       0     
-## sensor_2       0         13096      13096   642.48     0.4       642.46    0.54  
-## sensor_20      0         13096      13096   38.89      0.14      38.9      0.19  
-## sensor_21      0         13096      13096   23.34      0.084     23.34     0.11  
-## sensor_3       0         13096      13096   1588.1     5         1587.99   6.76  
-## sensor_4       0         13096      13096   1404.74    6.69      1404.44   9.1   
-## sensor_5       0         13096      13096   14.62      0         14.62     0     
-## sensor_6       0         13096      13096   21.61      0.0017    21.61     0     
-## sensor_7       0         13096      13096   553.76     0.68      553.8     0.93  
-## sensor_8       0         13096      13096   2388.07    0.057     2388.07   0.08  
-## sensor_9       0         13096      13096   9058.41    11.44     9057.32   13.09 
-## tte            0         13096      13096   75.84      53.06     68        80
-```
+Variable type: integer
+
+variable    missing   complete   n       mean     sd      p50    iqr 
+----------  --------  ---------  ------  -------  ------  -----  ----
+cycles      0         13096      13096   76.84    53.06   69     80  
+engine      0         13096      13096   51.54    28.29   52     48  
+sensor_17   0         13096      13096   392.57   1.23    393    1   
+sensor_18   0         13096      13096   2388     0       2388   0   
+
+Variable type: numeric
+
+variable       missing   complete   n       mean       sd        p50       iqr   
+-------------  --------  ---------  ------  ---------  --------  --------  ------
+op_setting_1   0         13096      13096   -1.1e-05   0.0022    0         0.003 
+op_setting_2   0         13096      13096   4.2e-06    0.00029   0         5e-04 
+op_setting_3   0         13096      13096   100        0         100       0     
+sensor_1       0         13096      13096   518.67     0         518.67    0     
+sensor_10      0         13096      13096   1.3        0         1.3       0     
+sensor_11      0         13096      13096   47.42      0.2       47.41     0.27  
+sensor_12      0         13096      13096   521.75     0.56      521.78    0.77  
+sensor_13      0         13096      13096   2388.07    0.057     2388.07   0.08  
+sensor_14      0         13096      13096   8138.95    10.19     8138.39   12.05 
+sensor_15      0         13096      13096   8.43       0.029     8.42      0.039 
+sensor_16      0         13096      13096   0.03       0         0.03      0     
+sensor_19      0         13096      13096   100        0         100       0     
+sensor_2       0         13096      13096   642.48     0.4       642.46    0.54  
+sensor_20      0         13096      13096   38.89      0.14      38.9      0.19  
+sensor_21      0         13096      13096   23.34      0.084     23.34     0.11  
+sensor_3       0         13096      13096   1588.1     5         1587.99   6.76  
+sensor_4       0         13096      13096   1404.74    6.69      1404.44   9.1   
+sensor_5       0         13096      13096   14.62      0         14.62     0     
+sensor_6       0         13096      13096   21.61      0.0017    21.61     0     
+sensor_7       0         13096      13096   553.76     0.68      553.8     0.93  
+sensor_8       0         13096      13096   2388.07    0.057     2388.07   0.08  
+sensor_9       0         13096      13096   9058.41    11.44     9057.32   13.09 
+tte            0         13096      13096   75.84      53.06     68        80    
 
 Notes:
   
@@ -180,7 +176,7 @@ Finally, we also __normalize__ data, because presumably the units of measurement
 ### The distribution of the time-to-event in the training set
 
  By looking at the distribution of the time-to-event for engines in the training set, we can make a few interesting observations:
-<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\GitHub_Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-3-1.png" style="display: block; margin: auto;" />
 
  * there are no "instant deaths": the minimum tte = 127 is not extremely smaller than the maximum tte = 361
  * the distribution is fairly right-skewed. With a sample mean of 205.31 and a sample sd of 46.3427492, we would expect the $2.5\%$ of the data to be close to 296.1417884, but the actual $97.5\%$-percentile is 324.075, hinting to a  fatter tail than for a normal distribution. In other words, we have quite a few "Highlanders" which manage to live 300 days or more. Of course, this is not a formal hypothesis test, but it's still quite suggestive.
@@ -188,10 +184,10 @@ Finally, we also __normalize__ data, because presumably the units of measurement
 ### Plot all time series
 
 Looking first of all at the operating settings shows that `op_setting_1` seems to randomly oscillate with a decreasing standard deviation, while `op_setting_2`,  averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. This might be related with the failure of the engines (all engines in the training set fail at some time). We also note that `op_setting_2` is fairly quantized.
-<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-4-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\GitHub_Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-4-1.png" style="display: block; margin: auto;" />
 
 Next, we have a look at the sensors data.
-<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-5-1.png" style="display: block; margin: auto;" />
+<img src="C:\Users\Andrea_2\Documents\GitHub_Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-5-1.png" style="display: block; margin: auto;" />
 
 Given the large number of sensors and time series, the visualization is understandably complex, but we can get some insights:
   
@@ -201,7 +197,8 @@ Given the large number of sensors and time series, the visualization is understa
 
 ### Plot a sample of time series
 To have a look at the individual, instead than the global, trends, we can concentrate on a sample of engines:
-<img src="C:\Users\Andrea_2\Documents\Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-6-1.png" style="display: block; margin: auto;" />
+
+<img src="C:\Users\Andrea_2\Documents\GitHub_Projects\Analysis-of-NASA-Turbofan-Degradation-Data\output\NASA_Engine_Degradation_Data_Analysis_files/figure-html/unnamed-chunk-6-1.png" style="display: block; margin: auto;" />
 
 This suggests that some sensors are correlated not only at a population level, i.e., averaging the sensor signals across all engines, but even for a single engine (compare `sensor_11` with `sensor_4` and `sensor_9` with `sensor_14` for the yellow line).
 
@@ -210,4 +207,4 @@ This concludes our EDA. We can now save the normalized data, and estimate the RU
 
 
 ## Remaining Useful Life Estimation
-
+TODO

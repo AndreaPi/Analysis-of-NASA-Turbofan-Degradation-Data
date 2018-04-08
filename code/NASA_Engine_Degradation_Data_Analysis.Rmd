@@ -17,35 +17,8 @@ p.caption {
 </style>
 
 ```{r setup, include=FALSE}
-library(knitr)
-library(readr)
-library(ggplot2)
-# library(patchwork)
-library(tools)
-library(magrittr)
-# library(flexsurv)
-# library(OIsurv)
-# library(dotwhisker)
-# library(fitdistrplus)
-library(skimr)
-library(dplyr)
-library(tidyr)
-library(viridis)
-# chunk options
-opts_chunk$set(warning = FALSE,
-               message = FALSE,
-               echo    = FALSE,
-               fig.align  = "center",
-               fig.width  = 15,
-               fig.height = 12)
-# tibble printing options
-options(tibble.print_max = 100, tibble.print_min = 100)
-# Setup plot environment
-textSize <- 15
-theme_set(theme_gray(base_size = textSize))
-# Set data directory: output directory is passed as a parameter to the report
-data_dir <- file.path("..", "data")
-output_dir <- params$output_dir
+source("EDA_rmd_setup.r")
+output_dir <- params$output_dir # needs to be in the Rmd file
 
 ```
 
@@ -59,7 +32,7 @@ These data have been used in the PHM (Prognostic and Health Management) competit
 
 _Experimental Scenario_
 
-_Data sets consists of multiple multivariate time series. Each data set is further divided into training and test subsets. Each time series is from a different engine – i.e., the data can be considered to be from a fleet of engines of the same type. Each engine starts with different degrees of initial wear and manufacturing variation which is unknown to the user. This wear and variation is considered normal, i.e., it is not considered a fault condition. There are three operational settings that have a substantial effect on engine performance. These settings are also included in the data. The data is contaminated with sensor noise._
+_Data sets consists of multiple multivariate time series. Each data set is further divided into training and test subsets. Each time series is from a different engine - i.e., the data can be considered to be from a fleet of engines of the same type. Each engine starts with different degrees of initial wear and manufacturing variation which is unknown to the user. This wear and variation is considered normal, i.e., it is not considered a fault condition. There are three operational settings that have a substantial effect on engine performance. These settings are also included in the data. The data is contaminated with sensor noise._
 
 _The engine is operating normally at the start of each time series, and develops a fault at some point during the series. In the training set, the fault grows in magnitude until system failure. In the test set, the time series ends some time prior to system failure. The objective of the competition is to predict the number of remaining operational cycles before failure in the test set, i.e., the number of operational cycles after the last cycle that the engine will continue to operate. Also provided a vector of true Remaining Useful Life (RUL) values for the test data._
 
@@ -87,9 +60,11 @@ We will concentrate on data set `FD001` for now, which consist of a training set
 data_filename <- "train_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 train_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
 data_filename <- "test_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
 data_filename <- "RUL_FD001.txt"
 data_path <- file.path(data_dir, data_filename)
 RUL_test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X2 = "_"))
@@ -112,25 +87,22 @@ names(test_set)  <- var_names
 add_tte <- function(dataset){
   dataset %<>% group_by(engine) %>% mutate(tte = max(cycles) - cycles) %>% ungroup
 }
+
 train_set <- add_tte(train_set)
 test_set  <- add_tte(test_set)
 
 ```
 
-```{r summary_train}
-skim_with(numeric = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL, hist = NULL),
-          integer = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL, hist = NULL))
-# skim_with(numeric = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL),
-#           integer = list(p0 = NULL, p25 = NULL, p75 = NULL, p100 = NULL))
-skim_with(numeric = list(iqr = function(x) IQR(x, na.rm = TRUE)),
-          integer = list(iqr = function(x) IQR(x, na.rm = TRUE)))
+```{r summary_train, results ="asis"}
+
 stats_train <- skim(train_set)
+
 kable(skim(train_set))
 ```
 
 and for the test set:
   
-```{r summary_test}
+```{r summary_test, results ="asis"}
 stats_test <- skim(test_set)
 kable(skim(test_set))
 
@@ -138,10 +110,6 @@ kable(skim(test_set))
 constants <- stats_train %>% filter(stat == "sd", value == 0)
 temp      <- stats_test %>% filter(stat == "sd", value == 0)
 stopifnot(constants$variable == temp$variable)
-# stats_train %>% filter(stat %in% c("sd", "iqr")) %>% 
-#   select(variable, stat, value) %>%
-#   spread(key = stat, value = value) %>%
-#   filter(iqr == 0 & sd > 0)
 
 ```
 
@@ -232,12 +200,14 @@ Given the large number of sensors and time series, the visualization is understa
 
 ### Plot a sample of time series
 To have a look at the individual, instead than the global, trends, we can concentrate on a sample of engines:
+
 ```{r}
 sample_train_set <- train_set %>% filter(engine %in% sample(engine, 10))
 sample_train_set$engine <- factor(sample_train_set$engine)
 
 sample_train_set_tall <- sample_train_set %>% 
 gather(key = sensor, value = measurement, -engine, -cycles, -starts_with("op"), -tte)
+
 ggplot(sample_train_set_tall, aes(x = cycles, y =  measurement, color = engine)) +
 geom_line() +
 geom_smooth(se = FALSE) +
@@ -253,10 +223,11 @@ This concludes our EDA. We can now save the normalized data, and estimate the RU
 normalized_train_set_filename <- "norm_train_FD001.txt"
 data_path <- file.path(output_dir, normalized_train_set_filename)
 write_csv(train_set, data_path)
+
 normalized_test_set_filename <- "norm_test_FD001.txt"
 data_path <- file.path(output_dir, normalized_test_set_filename)
 write_csv(test_set, data_path)
 ```
 
 ## Remaining Useful Life Estimation
-
+TODO

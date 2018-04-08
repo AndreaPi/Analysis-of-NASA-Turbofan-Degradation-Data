@@ -6,6 +6,7 @@ output_dir <- "output"
 output_reldir <- file.path("..", output_dir)
 render(rmd_filename, output_dir = output_dir, params = list(output_dir = output_reldir),
        envir = new.env())
+
 # need full path names for URL browsing
 project_dir <- getwd()
 html_absolute_path <- file.path(project_dir, output_dir, paste0(filename, ".html"))
