@@ -118,7 +118,7 @@ Notes:
 * **no missing data**, as it could be expected from simulated data
 * 100 time series in the training set, and 100 time series in the test set
 * the statistics on the number of cycles aren't relevant, because we should only look at the the statistics for the **maximum** number of cycles for each engine. However, the fact that the mean and median number of cycles for the training set are larger than for the test set, agrees with the fact that in the training set, the engines are followed until system failure. In the test set, the time series ends some time prior to system failure.  
-* the following variables are constant, both in the training nd in the test set, meaning that the operating condition was fixed and/or the sensor was broken/inactive: `r constants$variable`. We can discard these variables from the analysis. We will also normalize data, based on the mean and standard deviation of the training set.
+* the following variables are constant, both in the training and in the test set, meaning that the operating condition was fixed and/or the sensor was broken/inactive: `r constants$variable`. We can discard these variables from the analysis. 
 * __`sensor_6` is practically constant__ (`iqr=0`), even though it's not _exactly_ constant (the standard deviation is not 0). As a matter of fact, across all engines in the training set, it oscillates between `r length(unique(train_set$sensor_6))`  values which differ just for the last digit: `r unique(train_set$sensor_6)`. It would probably make sense to get rid of this variable too, but we'll leave it in, in the extremely unlikely case that these oscillations carry any useful signal. If they don't, no harm is done because the signal is so simple that any decent time-to-event regression model won't have any difficulty learning to ignore it.   
 
 ```{r}
@@ -133,7 +133,7 @@ Finally, we also __normalize__ data, because presumably the units of measurement
 train_set_unscaled <- train_set
 test_set_unscaled  <- test_set
 
-index <- !(names(train_set) %in% c("engine", "cycles"))
+index <- !(names(train_set) %in% c("engine", "cycles", "tte"))
 temp  <- scale(train_set[, index])
 train_set[, index] <- temp
 
@@ -148,7 +148,7 @@ test_set[, index]    <- scale(test_set[, index], center = means, scale = standar
  By looking at the distribution of the time-to-event for engines in the training set, we can make a few interesting observations:
 ```{r}
 
-tte <- train_set_unscaled %>% select(engine, cycles, tte) %>% group_by(engine) %>%
+tte <- train_set %>% select(engine, cycles, tte) %>% group_by(engine) %>%
   summarize(TTE = tte[1])
 
 nbins = nclass.FD(tte$TTE)
@@ -158,7 +158,7 @@ ggplot(tte, aes(x = TTE, y = ..density..)) +
 
 mean_tte <- mean(tte$TTE)
 sd_tte   <- sd(tte$TTE)
-normal_percentile_975 <- mean_tte + 1.96 * sd_tte
+normal_percentile_975 <- qnorm(p = 0.975, mean_tte, sd_tte)
 actual_percentile_975 <- quantile(tte$TTE, probs = 0.975) 
 ```
 

@@ -1,0 +1,220 @@
+---
+title: "Exploratory Data Analysis of NASA Turbofan Engine Degradation Data"
+author: "Andrea Panizza"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    keep_md: yes
+params:
+  output_dir: ../output
+---
+
+<style>
+p.caption {
+  font-size: 0.8em;
+}
+</style>
+
+```{r setup, include=FALSE}
+source("EDA_rmd_setup.r")
+output_dir <- params$output_dir # needs to be in the Rmd file
+
+```
+
+## Read data
+
+Data taken from [NASA Ames Prognostic Center](https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/). Specifically, dataset 6 **Turbofan Engine Degradation Simulation Data Set**. Description:
+
+>Engine degradation simulation was carried out using C-MAPSS. Four different were sets simulated under different combinations of operational conditions and fault modes. Records several sensor channels to characterize fault evolution. The data set was provided by the Prognostics CoE at NASA Ames.
+
+We concentrate on data set `FD001` for this analysis.
+
+ * engine number
+ * time, in cycles
+ * operational setting 1
+ * operational setting 2
+ *	operational setting 3
+ *	sensor measurement  1
+ *	sensor measurement  2
+ * ...
+ * sensor measurement 21
+ 
+ * Three data sets: training set, test set, RUL (Residual Life Estimation) values.
+ * Goal: estimate RUL for each engine in test set, using algo trained on train set
+
+```{r read_FD001, echo = TRUE}
+data_filename <- "train_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+train_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
+data_filename <- "test_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
+
+data_filename <- "RUL_FD001.txt"
+data_path <- file.path(data_dir, data_filename)
+RUL_test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X2 = "_"))
+
+glimpse(train_set)
+
+```
+
+
+## Exploratory Data Analysis
+### Summary statistics
+
+Training set: `r nrow(train_set)` observations for `r ncol(train_set)` variables.
+Test set:     `r nrow(test_set)` observations for `r ncol(test_set)` variables. 
+
+* Name variables for convenience
+* add `time to event` variable
+
+```{r var_names}
+var_names <- c("engine", "cycles", "op_setting_1", "op_setting_2", "op_setting_3",
+               paste0("sensor_",1:21) )
+names(train_set) <- var_names
+names(test_set)  <- var_names
+
+# add a Time to Event variable
+add_tte <- function(dataset){
+  dataset %<>% group_by(engine) %>% mutate(tte = max(cycles) - cycles) %>% ungroup
+}
+
+train_set <- add_tte(train_set)
+test_set  <- add_tte(test_set)
+
+```
+
+* display a brief summary for the training set
+* display a brief summary for the test set
+
+```{r summary_train, results ="asis"}
+
+stats_train <- skim(train_set)
+
+kable(skim(train_set))
+```
+
+```{r summary_test, results ="asis"}
+stats_test <- skim(test_set)
+kable(skim(test_set))
+
+# which variables are constant? Are they the same in the train & test set?
+constants <- stats_train %>% filter(stat == "sd", value == 0)
+temp      <- stats_test %>% filter(stat == "sd", value == 0)
+stopifnot(constants$variable == temp$variable)
+
+```
+
+Notes:
+  
+* **no missing data** (simulated data)
+* 100 time series in training set, 100 time series in test set.
+* some variables are constant, both in the training and in the test set, meaning that the operating condition was fixed and/or the sensor was broken/inactive: `r constants$variable`. We can discard these variables from the analysis. 
+
+```{r}
+train_set %<>% select(-one_of(constants$variable))
+test_set  %<>% select(-one_of(constants$variable))
+```
+
+ __normalize__ data, because presumably units of measurements (which are unknown anyway) don't carry any useful information about RUL. Also, normalizing features is usually a good idea when training Deep Neural Networks. __Normalization must be performed using only training set data__.
+
+```{r}
+# scaling based on training set
+train_set_unscaled <- train_set
+test_set_unscaled  <- test_set
+
+index <- !(names(train_set) %in% c("engine", "cycles", "tte"))
+temp  <- scale(train_set[, index])
+train_set[, index] <- temp
+
+means                <- attr(temp, "scaled:center")
+standard_deviations  <- attr(temp, "scaled:scale")
+test_set[, index]    <- scale(test_set[, index], center = means, scale = standard_deviations)
+
+```
+
+### Distribution of time-to-event
+
+Look at distribution of tte in training set:
+
+```{r}
+
+tte <- train_set %>% select(engine, cycles, tte) %>% group_by(engine) %>%
+  summarize(TTE = tte[1])
+
+nbins = nclass.FD(tte$TTE)
+ggplot(tte, aes(x = TTE, y = ..density..)) +
+  geom_histogram(col = "red", fill = "green", alpha = 0.2, bins = nbins) +
+  geom_density(col = "red", size = 1)
+
+mean_tte <- mean(tte$TTE)
+sd_tte   <- sd(tte$TTE)
+normal_percentile_975 <- qnorm(p = 0.975, mean_tte, sd_tte)
+actual_percentile_975 <- quantile(tte$TTE, probs = 0.975) 
+normal_percentile_975
+actual_percentile_975
+
+```
+
+ * no "instant deaths":  minimum tte = `r min(tte$TTE)` not extremely smaller than maximum tte = `r max(tte$TTE)`
+ * distribution is fairly right-skewed. `r normal_percentile_975` is quite lower than `r actual_percentile_975`, hinting to a  fatter tail than for a normal distribution. Not a formal hypothesis test, of course
+
+### Plot all time series
+
+Operational settings first:
+
+```{r}
+
+op_settings <- train_set %>% select(engine, cycles, starts_with("op")) %>%
+  gather(key = setting, value = measurement, -engine, -cycles)
+
+ggplot(op_settings, aes(x = cycles, y =  measurement)) +
+  geom_line(aes(group = engine), alpha = 0.1) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~ setting, scales = "free_y")
+
+```
+
+* `op_setting_1` seems to randomly oscillate with a decreasing standard deviation
+* `op_setting_2`, averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. 
+* This might be related with the failure of the engines (all engines in the training set fail at some time). 
+* `op_setting_2` is fairly quantized.
+
+Next, sensors data:
+```{r}
+
+sensors <- train_set %>% select(-starts_with("op"), -tte) %>%
+  gather(key = sensor, value = measurement, -engine, -cycles)
+
+ggplot(sensors, aes(x = cycles, y =  measurement)) +
+  geom_line(aes(group = engine), alpha = 0.025) +
+  facet_wrap(~ sensor, scales = "free_y")
+```
+
+* lot of signal in the sensors. For example, the sooner `sensor_11` starts increasing, the shorter the residual life of the engine.
+* also a lot of noise (large oscillations), and correlation among sensors. For example, `sensor_11` and `sensor_4`, or `sensor_9` and `sensor_14` seem to have the same trend, at least averaged across all engines.
+* `sensor_17` measurements are fairly quantized, but they seem to carry some signal.
+* `sensor_6`  seems to oscillate randomly among `r length(unique(train_set_unscaled$sensor_6))` values, so it's probably useless.
+
+### Plot a sample of time series
+Now look at a sample of engines, to see individual, rather than global trends:
+
+```{r}
+sample_train_set <- train_set %>% filter(engine %in% sample(engine, 10))
+sample_train_set$engine <- factor(sample_train_set$engine)
+
+sample_train_set_tall <- sample_train_set %>% 
+gather(key = sensor, value = measurement, -engine, -cycles, -starts_with("op"), -tte)
+
+ggplot(sample_train_set_tall, aes(x = cycles, y =  measurement, color = engine)) +
+geom_line() +
+geom_smooth(se = FALSE) +
+scale_color_viridis(discrete = TRUE) +
+facet_wrap(~ sensor, scales = "free_y")
+```
+
+This suggests that some sensors are correlated not only at a population level, i.e., averaging the sensor signals across all engines, but even for a single engine (compare `sensor_11` with `sensor_4` and `sensor_9` with `sensor_14` for the yellow line).
+
+This concludes our EDA.
