@@ -14,7 +14,10 @@ params:
 p.caption {
   font-size: 0.8em;
 }
-</style>
+</style>  
+
+
+**EDA is described in Chapter 7 of R4DS**
 
 ```{r setup, include=FALSE}
 source("EDA_rmd_setup.r")
@@ -22,59 +25,47 @@ output_dir <- params$output_dir # needs to be in the Rmd file
 
 ```
 
-## Read data
+## Read data 
 
-Data taken from [NASA Ames Prognostic Center](https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/). Specifically, dataset 6 **Turbofan Engine Degradation Simulation Data Set**. Description:
+**Data import is described in Chapter 11 of R4DS.**
+Data taken from [NASA Ames Prognostic Center](https://ti.arc.nasa.gov/tech/dash/groups/pcoe/prognostic-data-repository/). Specifically, dataset 6 **Turbofan Engine Degradation Simulation Data Set**. Four datasets: we concentrate on data set `FD001` for this analysis.
 
->Engine degradation simulation was carried out using C-MAPSS. Four different were sets simulated under different combinations of operational conditions and fault modes. Records several sensor channels to characterize fault evolution. The data set was provided by the Prognostics CoE at NASA Ames.
+ * three data sets: a training set, a test set, a set of Remaining Useful Life (RUL) values for each engine in the test set
+ * Goal: predict the RUL for each engine in the test set, using an algorithm trained on the training set
+ * Only look at training set for simplicity
 
-We concentrate on data set `FD001` for this analysis.
-
- * engine number
- * time, in cycles
- * operational setting 1
- * operational setting 2
- *	operational setting 3
- *	sensor measurement  1
- *	sensor measurement  2
- * ...
- * sensor measurement 21
- 
- * Three data sets: training set, test set, RUL (Residual Life Estimation) values.
- * Goal: estimate RUL for each engine in test set, using algo trained on train set
-
-```{r read_FD001, echo = TRUE}
-data_filename <- "train_FD001.txt"
-data_path <- file.path(data_dir, data_filename)
+```{r}
+file_name <- "train_FD001.txt"
+data_path <- file.path(data_dir, file_name)
 train_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
 
-data_filename <- "test_FD001.txt"
-data_path <- file.path(data_dir, data_filename)
-test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X27 = "_"))
-
-data_filename <- "RUL_FD001.txt"
-data_path <- file.path(data_dir, data_filename)
-RUL_test_set <- read_table2(data_path, col_names = FALSE, col_types = cols(X2 = "_"))
-
 glimpse(train_set)
-
 ```
 
-
+ * engine number
+ * time (in cycles)
+ * operating setting 1
+ * operating setting 2
+ * operating setting 3
+ * sensor 1
+ * sensor 2
+ * ....
+ * sensor 21
+ 
 ## Exploratory Data Analysis
 ### Summary statistics
-
-Training set: `r nrow(train_set)` observations for `r ncol(train_set)` variables.
-Test set:     `r nrow(test_set)` observations for `r ncol(test_set)` variables. 
-
-* Name variables for convenience
-* add `time to event` variable
-
-```{r var_names}
+ 
+ * name variables
+ * convert `engine` to a factor
+ * add a time to event variable
+ * create some basic statistical summaries
+ 
+```{r}
 var_names <- c("engine", "cycles", "op_setting_1", "op_setting_2", "op_setting_3",
-               paste0("sensor_",1:21) )
+               paste0("sensor_", 1:21))
 names(train_set) <- var_names
-names(test_set)  <- var_names
+
+train_set$engine <- factor(train_set$engine)
 
 # add a Time to Event variable
 add_tte <- function(dataset){
@@ -82,56 +73,40 @@ add_tte <- function(dataset){
 }
 
 train_set <- add_tte(train_set)
-test_set  <- add_tte(test_set)
+
 
 ```
 
-* display a brief summary for the training set
-* display a brief summary for the test set
-
-```{r summary_train, results ="asis"}
+```{r, results="asis"}
 
 stats_train <- skim(train_set)
-
-kable(skim(train_set))
-```
-
-```{r summary_test, results ="asis"}
-stats_test <- skim(test_set)
-kable(skim(test_set))
-
-# which variables are constant? Are they the same in the train & test set?
-constants <- stats_train %>% filter(stat == "sd", value == 0)
-temp      <- stats_test %>% filter(stat == "sd", value == 0)
-stopifnot(constants$variable == temp$variable)
+kable(stats_train)
 
 ```
 
-Notes:
-  
-* **no missing data** (simulated data)
-* 100 time series in training set, 100 time series in test set.
-* some variables are constant, both in the training and in the test set, meaning that the operating condition was fixed and/or the sensor was broken/inactive: `r constants$variable`. We can discard these variables from the analysis. 
-
+ * 100 engines
+ * ** no missing values** (simulated data)
+ * some variables have a standard deviation of 0, and they can be dropped
+ 
 ```{r}
+
+constants <- stats_train %>% filter(stat == "sd" & value == 0)
 train_set %<>% select(-one_of(constants$variable))
-test_set  %<>% select(-one_of(constants$variable))
+
 ```
 
- __normalize__ data, because presumably units of measurements (which are unknown anyway) don't carry any useful information about RUL. Also, normalizing features is usually a good idea when training Deep Neural Networks. __Normalization must be performed using only training set data__.
+
+### Normalize data
 
 ```{r}
-# scaling based on training set
 train_set_unscaled <- train_set
-test_set_unscaled  <- test_set
 
 index <- !(names(train_set) %in% c("engine", "cycles", "tte"))
-temp  <- scale(train_set[, index])
+temp <- scale(train_set[, index])
 train_set[, index] <- temp
 
 means                <- attr(temp, "scaled:center")
 standard_deviations  <- attr(temp, "scaled:scale")
-test_set[, index]    <- scale(test_set[, index], center = means, scale = standard_deviations)
 
 ```
 
@@ -158,9 +133,10 @@ actual_percentile_975
 
 ```
 
- * no "instant deaths":  minimum tte = `r min(tte$TTE)` not extremely smaller than maximum tte = `r max(tte$TTE)`
- * distribution is fairly right-skewed. `r normal_percentile_975` is quite lower than `r actual_percentile_975`, hinting to a  fatter tail than for a normal distribution. Not a formal hypothesis test, of course
 
+ * no "infant mortality": all engines ran for at least `r min(tte$TTE)` days
+ * distribution is fairly right-skewed. It looks like we have more engine with a longer than average life, than we would expect with a normal distribution
+ 
 ### Plot all time series
 
 Operational settings first:
@@ -177,10 +153,11 @@ ggplot(op_settings, aes(x = cycles, y =  measurement)) +
 
 ```
 
-* `op_setting_1` seems to randomly oscillate with a decreasing standard deviation
+* `op_setting_1` seems to randomly oscillate
 * `op_setting_2`, averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. 
 * This might be related with the failure of the engines (all engines in the training set fail at some time). 
 * `op_setting_2` is fairly quantized.
+
 
 Next, sensors data:
 ```{r}
@@ -203,7 +180,6 @@ Now look at a sample of engines, to see individual, rather than global trends:
 
 ```{r}
 sample_train_set <- train_set %>% filter(engine %in% sample(engine, 10))
-sample_train_set$engine <- factor(sample_train_set$engine)
 
 sample_train_set_tall <- sample_train_set %>% 
 gather(key = sensor, value = measurement, -engine, -cycles, -starts_with("op"), -tte)

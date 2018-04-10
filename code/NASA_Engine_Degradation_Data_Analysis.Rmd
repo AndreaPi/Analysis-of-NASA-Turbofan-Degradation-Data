@@ -97,14 +97,14 @@ test_set  <- add_tte(test_set)
 
 stats_train <- skim(train_set)
 
-kable(skim(train_set))
+kable(stats_train)
 ```
 
 and for the test set:
   
 ```{r summary_test, results ="asis"}
 stats_test <- skim(test_set)
-kable(skim(test_set))
+kable(stats_test)
 
 # which variables are constant? Are they the same in the train & test set?
 constants <- stats_train %>% filter(stat == "sd", value == 0)
@@ -125,6 +125,8 @@ Notes:
 train_set %<>% select(-one_of(constants$variable))
 test_set  %<>% select(-one_of(constants$variable))
 ```
+
+### Normalize data
 
 Finally, we also __normalize__ data, because presumably the units of measurements (which are unknown anyway) don't carry any useful information about RUL. Also, normalizing features is usually a good idea when training Deep Neural Networks. __Normalization must be performed using only training set data__.
 
@@ -167,7 +169,10 @@ actual_percentile_975 <- quantile(tte$TTE, probs = 0.975)
 
 ### Plot all time series
 
-Looking first of all at the operating settings shows that `op_setting_1` seems to randomly oscillate with a decreasing standard deviation, while `op_setting_2`,  averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. This might be related with the failure of the engines (all engines in the training set fail at some time). We also note that `op_setting_2` is fairly quantized.
+Looking first of all at the operating settings shows that `op_setting_1` seems to randomly oscillate, with a decreasing standard deviation. However, it's possible that the standard deviation doesn't really decrease, but that we simply see a lesser density of curves, since only few engines survive for a longer time.
+
+The instantaneous mean of `op_setting_2`,  averaged over all time series, gradually increases with time, slowly at first and then faster at some point in time. This might be related with the failure of the engines (all engines in the training set fail at some time). We also note that `op_setting_2` is fairly quantized.
+
 ```{r}
 
 op_settings <- train_set %>% select(engine, cycles, starts_with("op")) %>%
